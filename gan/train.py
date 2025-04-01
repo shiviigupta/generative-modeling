@@ -28,8 +28,8 @@ def get_optimizers_and_schedulers(gen, disc):
     # The learning rate for the generator should be decayed to 0 over
     # 100K iterations.
     ##################################################################
-    scheduler_discriminator = None
-    scheduler_generator = None
+    scheduler_discriminator = torch.optim.lr_scheduler.LambdaLR(optim_discriminator, lr_lambda=lambda epoch: 1 - min(epoch / 500000, 1))
+    scheduler_generator = torch.optim.lr_scheduler.LambdaLR(optim_generator, lr_lambda=lambda epoch: 1 - min(epoch / 100000, 1))
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -105,8 +105,9 @@ def train_model(
                 # 2. Compute discriminator output on the train batch.
                 # 3. Compute the discriminator output on the generated data.
                 ##################################################################
-                discrim_real = None
-                discrim_fake = None
+                gen_fake = gen.forward(train_batch.shape[0])
+                discrim_real = disc.forward(train_batch)
+                discrim_fake = disc.forward(gen_fake)
                 ##################################################################
                 #                          END OF YOUR CODE                      #
                 ##################################################################
@@ -115,8 +116,9 @@ def train_model(
                 # TODO 1.5 Compute the interpolated batch and run the
                 # discriminator on it.
                 ###################################################################
-                interp = None
-                discrim_interp = None
+                alpha = torch.randn(1).cuda()
+                interp = alpha * train_batch + (1 - alpha) * gen_fake
+                discrim_interp = disc.forward(interp)
                 ##################################################################
                 #                          END OF YOUR CODE                      #
                 ##################################################################
@@ -126,7 +128,7 @@ def train_model(
             )
             
             optim_discriminator.zero_grad(set_to_none=True)
-            scaler.scale(discriminator_loss).backward()
+            scaler.scale(discriminator_loss.cuda().half()).backward()
             scaler.step(optim_discriminator)
             scheduler_discriminator.step()
 
@@ -136,16 +138,16 @@ def train_model(
                     # TODO 1.2: Compute generator and discriminator output on
                     # generated data.
                     ###################################################################
-                    fake_batch = None
-                    discrim_fake = None
+                    fake_batch = gen.forward(batch_size)
+                    discrim_fake=disc.forward(fake_batch)
                     ##################################################################
                     #                          END OF YOUR CODE                      #
                     ##################################################################
 
-                    generator_loss = gen_loss_fn(discrim_fake)
+                    generator_loss = gen_loss_fn(discrim_fake).half()
 
                 optim_generator.zero_grad(set_to_none=True)
-                scaler.scale(generator_loss).backward()
+                scaler.scale(generator_loss.cuda().half()).backward()
                 scaler.step(optim_generator)
                 scheduler_generator.step()
 
@@ -156,7 +158,8 @@ def train_model(
                         # TODO 1.2: Generate samples using the generator.
                         # Make sure they lie in the range [0, 1]!
                         ##################################################################
-                        generated_samples = None
+                        generated_samples = gen.forward(batch_size) 
+                        generated_samples = (generated_samples + 1.0)/2.0
                         ##################################################################
                         #                          END OF YOUR CODE                      #
                         ##################################################################
